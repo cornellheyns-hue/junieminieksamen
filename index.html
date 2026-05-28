@@ -247,6 +247,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg2);color:#1e293b;min-he
     <div class="online-dot"></div>
     <span class="online-lbl">Sisteem aanlyn</span>
     <span id="syncStatus" style="font-size:12px;color:#22c55e;margin-left:12px;font-weight:500"></span>
+    <button id="tekenInBtn" onclick="teken_in()" style="display:inline-flex;margin-left:12px;background:#4285f4;color:#fff;border:none;padding:5px 14px;border-radius:var(--radius);font-family:inherit;font-size:12px;cursor:pointer;align-items:center;gap:6px"><i class="ti ti-brand-google" style="font-size:13px"></i> Teken in</button>
   </div>
 
   <div class="content">
@@ -775,7 +776,7 @@ let db={eksamens:[],bystand:[],flags:[],gebruikers:[],checks:{}};
 // ================================================================
 const CLIENT_ID = "645468833085-or9haj7flc56ocvs0pt8hl8ed124u63l.apps.googleusercontent.com";
 const SHEET_ID = "1mDqH2WVtBybCrWJOGP-bCxvYiuwTzQHe4TTmaCEWZ70";
-const GITHUB_PAGES_URL = "https://cornellheyns-hue.github.io/junieminieksamen";
+const GITHUB_PAGES_URL = "https://mosww.github.io/junieeksamen";
 const SHEET_NAME = "Dashboard_Data";
 const SCOPES = "https://www.googleapis.com/auth/spreadsheets";
 
@@ -794,7 +795,7 @@ function save(){
 async function stoorNaSheet(){
   if(!accessToken){toonSyncStatus("fout");return;}
   toonSyncStatus("besig");
-  const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_NAME}!A1:A2?valueInputOption=RAW`;
+  const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_NAME+"!A1:A2")}?valueInputOption=RAW`;
   try{
     const r=await fetch(url,{
       method:"PUT",
@@ -807,9 +808,10 @@ async function stoorNaSheet(){
 
 async function laaiVanSheet(){
   if(!accessToken)return null;
-  const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_NAME}!A1`;
+  const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_NAME+"!A1")}`;
   try{
     const r=await fetch(url,{headers:{"Authorization":"Bearer "+accessToken}});
+    if(!r.ok)return null;
     const j=await r.json();
     if(j.values&&j.values[0]&&j.values[0][0])return JSON.parse(j.values[0][0]);
   }catch(e){}
@@ -829,22 +831,23 @@ function toonSyncStatus(staat){
 }
 
 function teken_in(){
-  if(tokenClient)tokenClient.requestAccessToken();
+  if(typeof google==='undefined'){showToast("Google laai nog...");return;}
+  if(!tokenClient)initialiseerGoogle();
+  tokenClient.requestAccessToken({prompt:"select_account"});
 }
 
 function initialiseerGoogle(){
+  if(typeof google==='undefined')return;
   tokenClient=google.accounts.oauth2.initTokenClient({
     client_id:CLIENT_ID,
     scope:SCOPES,
     callback:async(resp)=>{
-      if(resp.error){toonSyncStatus("fout");return;}
+      if(resp.error){console.log("OAuth fout:",resp.error);toonSyncStatus("fout");return;}
       accessToken=resp.access_token;
+      document.getElementById("tekenInBtn").style.display="none";
       toonSyncStatus("laai");
       const data=await laaiVanSheet();
-      if(data){
-        db=data;
-        try{localStorage.setItem(sk("db"),JSON.stringify(db));}catch(e){}
-      }
+      if(data){db=data;try{localStorage.setItem(sk("db"),JSON.stringify(db));}catch(e){}}
       initDB();renderAll();toonSyncStatus("ok");
     }
   });
@@ -919,7 +922,7 @@ function statusClass(s){
   if(s==="Gereed vir skedulering")return"status-gereed";
   if(s==="Geskeduleer")return"status-geskeduleer";
   if(s==="Onder nasien")return"status-nasien";
-  if(s==="Hagende herskryf")return"status-herskryf";
+  if(s==="Hangende herskryf")return"status-herskryf";
   if(s==="Afgehandel")return"status-afgehandel";
   return"status-opstel";
 }
@@ -927,12 +930,12 @@ function statusClass(s){
 function renderStats(){
   const eks=db.eksamens.filter(e=>e.graad===currentGraad);
   const klaar=eks.filter(e=>e.status==="Afgehandel").length;
-  const herskryf=eks.filter(e=>e.status==="Hagende herskryf").length;
+  const herskryf=eks.filter(e=>e.status==="Hangende herskryf").length;
   const flags=db.flags.filter(f=>f.graad===currentGraad).length;
   document.getElementById("statsRow").innerHTML=`
     <div class="stat-card"><div class="lbl">Eksamens</div><div class="val">${eks.length}</div><div class="sub">Totaal geskeduleer</div></div>
     <div class="stat-card"><div class="lbl">Afgehandel</div><div class="val" style="color:var(--green)">${klaar}</div><div class="sub">Volledig klaar</div></div>
-    <div class="stat-card"><div class="lbl">Hagende herskryf</div><div class="val" style="color:var(--red)">${herskryf}</div><div class="sub">Wag op herskryf</div></div>
+    <div class="stat-card"><div class="lbl">Hangende herskryf</div><div class="val" style="color:var(--red)">${herskryf}</div><div class="sub">Wag op herskryf</div></div>
     <div class="stat-card"><div class="lbl">Flags aangemeld</div><div class="val" style="color:var(--yellow)">${flags}</div><div class="sub">Invigilator flags</div></div>
   `;
 }
@@ -961,7 +964,7 @@ function renderRooster(){
         <option value="Gereed vir skedulering" ${e.status==="Gereed vir skedulering"?"selected":""}>Gereed vir skedulering</option>
         <option value="Geskeduleer" ${e.status==="Geskeduleer"?"selected":""}>Geskeduleer</option>
         <option value="Onder nasien" ${e.status==="Onder nasien"?"selected":""}>Onder nasien</option>
-        <option value="Hagende herskryf" ${e.status==="Hagende herskryf"?"selected":""}>Hagende herskryf</option>
+        <option value="Hangende herskryf" ${e.status==="Hangende herskryf"?"selected":""}>Hangende herskryf</option>
         <option value="Afgehandel" ${e.status==="Afgehandel"?"selected":""}>Afgehandel</option>
       </select></td>
       <td>${roosterKOUnlocked?`<button onclick="delEksamen('${e.id}')" style="background:none;border:none;color:#ef4444;cursor:pointer;padding:4px 6px;border-radius:var(--radius);font-size:15px;" title="Verwyder"><i class="ti ti-trash" aria-hidden="true"></i></button>`:""}
